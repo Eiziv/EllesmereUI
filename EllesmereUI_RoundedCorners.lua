@@ -33,12 +33,23 @@ if EUI_CLIENT_BLOCKED then return end -- pre-12.1 client failsafe (EllesmereUI_C
 --  and the caller runs RoundCorners, while the owner is not rounded, while a
 --  body texture is left without the mask (the walk tries it again) or when no
 --  corner rounds.
+--  EllesmereUI.RoundedCover(owner, tex) adds a texture drawn over the body
+--  from outside it (an overlay's copy of the art) to the body, for as long as
+--  the owner rounds; nothing while the owner never rounded.
+--  EllesmereUI.RoundedSwipe(owner, cd) gives a Cooldown over the owner's rect
+--  the owner's outline: call it after RoundCorners and after anything else
+--  that sets the swipe file. An owner that is not rounded hands the whole of
+--  the caller's file back. All corners round, on a rect no taller than wide.
 --
 --  Masks: rounded-<r>.tga / rounded-inv-<r>.tga, (2r + 1) texels square
 --  (.tools/rounded-glow/make_rounded_masks.py), sliced at r texels; no larger,
 --  since the client shrinks the corners of a sliced texture bigger than its
 --  region. rounded-<r>-<c>.tga / rounded-inv-<r>-<c>.tga: the same with only
 --  the corners in c round, the rest square.
+--  Swipe: a Cooldown draws its swipe from one stretched file (no mask, no
+--  slices), so it takes a cell of swipe.png, a sheet of rounded rects by
+--  radius and proportions (.tools/rounded-glow/make_rounded_swipe.py), the
+--  radius rounded up so the swipe never pokes out of the outline.
 --  Body: a texture takes at most 3 masks, so each body texture gets ONE
 --  nine-sliced rounded-rect mask, hosted on the owner (an ancestor of every
 --  body texture, so it reaches into SetClipsChildren frames too). The bar
@@ -77,8 +88,13 @@ local ALL_CORNERS = 15
 -- the arc center).
 local GLOW_FMIN, GLOW_NA, GLOW_NB = 0.03, 32, 12
 local GLOW_LOGSTEP = math.log(2 / GLOW_FMIN) / (GLOW_NA - 1)
+-- swipe.png (the generator's constants match these): SWIPE_COLS columns by
+-- radius in 64ths of the rect's height, SWIPE_ROWS rows by height / width in
+-- even steps from 0.5 to 1, cells of SWIPE_CELL texels.
+local SWIPE = MEDIA .. "swipe.png"
+local SWIPE_COLS, SWIPE_ROWS, SWIPE_CELL = 32, 8, 64
 local STRETCHED = Enum.UITextureSliceMode.Stretched
-local floor, min, max, log, exp = math.floor, math.min, math.max, math.log, math.exp
+local floor, ceil, min, max, log, exp = math.floor, math.ceil, math.min, math.max, math.log, math.exp
 local pairs, select, pcall = pairs, select, pcall
 
 -- Media paths by number, built on first use.
@@ -118,6 +134,8 @@ local EMPTY = {}
 local state = setmetatable({}, { __mode = "k" })       -- owner -> rounding state
 local byBorder = setmetatable({}, { __mode = "k" })    -- border frame -> state
 local ownTex = setmetatable({}, { __mode = "k" })      -- our pieces, never masked
+local swiped = setmetatable({}, { __mode = "k" })      -- cooldown -> on a swipe.png cell
+local swipeLow, swipeHigh = { x = 0, y = 0 }, { x = 1, y = 1 }
 local hooked = false
 
 EllesmereUI.ROUNDED_MAX_RADIUS = MAX_RADIUS
@@ -268,6 +286,10 @@ local function MaskBody(st, roots, singles, radius, cont, skip)
     for i = 1, 8 do
         local tex = singles[i]
         if tex then Seat(tex) end
+    end
+    local cover = st.cover
+    if cover then
+        for tex in pairs(cover) do Seat(tex) end
     end
     st.missed = wMissed
     wMasked, wMask, wSkip = nil, nil, nil
@@ -562,7 +584,11 @@ local function Fit(st)
     -- A radius-r mask is 2r + 1 texels square, and the client shrinks a sliced
     -- texture's corners on a region smaller than the texture: the radius stays
     -- at most (short side - 1) / 2, so the region always holds its mask.
-    local half = HalfSide(rect)
+    -- The size is kept for RoundedSwipe, so its calls between passes read nothing.
+    local w, h = rect:GetSize()
+    if issecretvalue(w) or issecretvalue(h) then w, h = nil, nil end
+    st.w, st.h = w, h
+    local half = w and min(w, h) / 2
     if half and half >= 1 then
         local cap = max(1, floor(half - 0.5))
         if radius > cap then radius = cap end
@@ -604,6 +630,7 @@ Refit = function(owner)
     local st = state[owner]
     if not (st and st.on) then return end
     local radius, inner, cont, glow = Fit(st)
+    st.fit = radius
     ReseatMask(st, inner, cont)
     Paint(st, radius, inner, cont, glow)
 end
@@ -658,6 +685,7 @@ function EllesmereUI.RoundCorners(owner, radius, opts)
         end
     end
     local r, inner, cont, glow = Fit(st)
+    st.fit = r
     MaskBody(st, roots, opts.textures or EMPTY, inner, cont, border)
     Paint(st, r, inner, cont, glow)
     if not st.on then
@@ -678,4 +706,51 @@ function EllesmereUI.RoundedSetCorners(owner, corners)
     if st.border then byBorder[st.border] = st end
     Refit(owner)
     return true
+end
+
+-- A texture drawn over the owner's body from outside it joins the body: now,
+-- and on every later pass (weak: it goes with its frame).
+function EllesmereUI.RoundedCover(owner, tex)
+    local st = owner and state[owner]
+    if not (st and tex) then return end
+    local cover = st.cover
+    if not cover then
+        cover = setmetatable({}, { __mode = "k" })
+        st.cover = cover
+    end
+    cover[tex] = true
+    if st.on and not st.masked[tex] and AddMask(tex, st.mask) then
+        st.masked[tex] = st.gen
+    end
+end
+
+-- The swipe.png cell for the owner's outline on cd, set after the file as a
+-- sheet needs (true), or the whole file again once the owner no longer
+-- rounds (false; the file is the caller's to set).
+function EllesmereUI.RoundedSwipe(owner, cd)
+    if not cd then return false end
+    local st = owner and state[owner]
+    if st and st.on then
+        local w, h = st.w, st.h
+        if w and w > 0 and h > 0 then
+            local col = Clamp(ceil(st.fit * 64 / h - 0.001), 1, SWIPE_COLS)
+            local row = Clamp(floor((h / w - 0.5) * 2 * (SWIPE_ROWS - 1) + 0.5) + 1, 1, SWIPE_ROWS)
+            -- Half a texel in from the cell's edges: no neighbour bleeds in.
+            local tw, th = SWIPE_COLS * SWIPE_CELL, SWIPE_ROWS * SWIPE_CELL
+            swipeLow.x = ((col - 1) * SWIPE_CELL + 0.5) / tw
+            swipeLow.y = ((row - 1) * SWIPE_CELL + 0.5) / th
+            swipeHigh.x = (col * SWIPE_CELL - 0.5) / tw
+            swipeHigh.y = (row * SWIPE_CELL - 0.5) / th
+            cd:SetSwipeTexture(SWIPE)
+            cd:SetTexCoordRange(swipeLow, swipeHigh)
+            swiped[cd] = true
+            return true
+        end
+    end
+    if swiped[cd] then
+        swiped[cd] = nil
+        swipeLow.x, swipeLow.y, swipeHigh.x, swipeHigh.y = 0, 0, 1, 1
+        cd:SetTexCoordRange(swipeLow, swipeHigh)
+    end
+    return false
 end
