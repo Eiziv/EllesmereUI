@@ -350,6 +350,27 @@ function ns.ERB_BuildCastBarPage(pageName, parent, yOffset)
             end
             EllesmereUI.RegisterWidgetRefresh(function() updateBorderSwatch(); UpdateBorderSwatchState() end)
             UpdateBorderSwatchState()
+            -- Corner Radius (EllesmereUI_RoundedCorners.lua): an inline cog left
+            -- of the swatch.
+            rgn._lastInline = borderSwatch
+            local radiusCog = EllesmereUI.BuildInlineCog(rgn, {
+                title = "Corner Radius", tip = "Corner Radius",
+                disabled = function()
+                    if castOff() then return true end
+                    local p = DB()
+                    return not EllesmereUI.RoundedStyleOK(p and p.castBar.borderTexture)
+                end,
+                disabledTooltip = function()
+                    if castOff() then return "Player Cast Bar" end
+                    return "This option requires the Solid, Glow or Shadow border style."
+                end,
+                rows = {
+                    { type = "slider", label = "Corner Radius", min = 0, max = EllesmereUI.ROUNDED_MAX_RADIUS, step = 1,
+                      get = function() local p = DB(); return p and p.castBar.cornerRadius or 0 end,
+                      set = function(v) local p = DB(); if not p then return end; p.castBar.cornerRadius = v; RefreshCast() end },
+                },
+            })
+            EllesmereUI.BlizzStyle.BlockInline("castbar", radiusCog)
         end
         if not EllesmereUI._prebuilding then
             local rgn = cbBsRow._leftRegion
