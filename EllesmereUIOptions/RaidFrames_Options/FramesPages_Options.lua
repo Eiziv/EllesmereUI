@@ -868,6 +868,9 @@ local function BuildMainPage(pageName, parent, yOffset)
                 { type = "slider", label = "Corner Radius", min = 0, max = EllesmereUI.ROUNDED_MAX_RADIUS, step = 1,
                   get = function() return SVal("cornerRadius", 0) end,
                   set = function(v) SSet("cornerRadius", v) end },
+                { type = "slider", label = "Aura Icon Radius", min = 0, max = EllesmereUI.ROUNDED_MAX_RADIUS, step = 1,
+                  get = function() return SVal("auraCornerRadius", 0) end,
+                  set = function(v) SSet("auraCornerRadius", v > 0 and v or nil) end },
             }, function() return SGet("cornerMask") end, function(v) SSet("cornerMask", v) end),
         })
     end

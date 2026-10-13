@@ -340,6 +340,14 @@ end
 
 -- sizeOverride: the dispellable-location styles reuse the whole debuff
 -- style with only the physical size swapped (see DispLocSize).
+-- Aura Icon Radius: one value for debuff icons and Buff Manager icons, nil
+-- while off or under a stock style.
+function ns.RFC_AuraRadius()
+    local r = ns.db and ns.db.profile and ns.db.profile.auraCornerRadius or 0
+    if r <= 0 or (ns.RF_Stock and ns.RF_Stock()) then return nil end
+    return r
+end
+
 local function BuildDebuffStyle(s, sizeOverride)
     local br, bg, bb = ColorParts(s.debuffBorderColor, 0, 0, 0)
     local size = sizeOverride and ns.RFC_SnapSize(sizeOverride) or ns.RFC_DebuffSize(s)
@@ -356,6 +364,8 @@ local function BuildDebuffStyle(s, sizeOverride)
         iconCrop = true,
         iconZoom = s.debuffIconZoom or 0.08,
         border = (s.debuffBorderSize or 1) > 0 and { br, bg, bb, 1, size = s.debuffBorderSize or 1 } or nil,
+        -- Aura Icon Radius (the Corner Radius cog; profile-wide like bmIconZoom).
+        cornerRadius = ns.RFC_AuraRadius(),
         -- Dispellable debuffs get the engine dispel-type border over the
         -- static one (dispelName is secret in 12.1; see AuraKit).
         dispelBorder = true,
@@ -822,7 +832,7 @@ end
 local classFP = {}
 
 local function DebuffStyleFP(s, font)
-    return FP(font, s.debuffSize, ns.RFC_DebuffSize(s), s.debuffIconZoom, s.debuffBorderSize, CK(s.debuffBorderColor),
+    return FP(font, ns.RFC_AuraRadius(), s.debuffSize, ns.RFC_DebuffSize(s), s.debuffIconZoom, s.debuffBorderSize, CK(s.debuffBorderColor),
         s.debuffShowSwipe, s.debuffShowDurText, s.debuffDurTextSize, CK(s.debuffDurTextColor),
         s.debuffDurTextOffsetX, s.debuffDurTextOffsetY, s.debuffShowStacks, s.debuffStacksTextSize,
         CK(s.debuffStacksTextColor), s.debuffStacksOffsetX, s.debuffStacksOffsetY, s.debuffHideTooltips,
@@ -1404,6 +1414,7 @@ local function BuildBmIconStyle(ind, iscale, size)
         hideIcon = hideIcon,
         border = (not hideIcon and (ind.indBorderSize or 1) > 0)
             and { br, bg, bb, 1, size = ind.indBorderSize or 1 } or nil,
+        cornerRadius = (not hideIcon) and ns.RFC_AuraRadius() or nil,
         cooldownReverse = true,
         hideSwipe = hideIcon or (ind.showDuration == false),
         noDefaultFonts = true,
@@ -2070,7 +2081,7 @@ local function BmVisualKey(kind, ind, size, font, spellID)
     -- Tooltips" toggle restyles (the fingerprint guards skip otherwise).
     if kind == "icon" then
         return FP(font, size, (ns.db and ns.db.profile and ns.db.profile.bmIconZoom) or 0.08,
-            ind.iconOpacity, ind.hideIcon, ind.indBorderSize, CK(ind.indBorderColor),
+            ns.RFC_AuraRadius(), ind.iconOpacity, ind.hideIcon, ind.indBorderSize, CK(ind.indBorderColor),
             ind.showDuration, ind.showDurationText, ind.durationTextSize, CK(ind.durationTextColor),
             ind.durationTextOffsetX, ind.durationTextOffsetY, ind.thresholdEnabled, ind.threshold,
             CK(ind.thresholdColor), ind.showStacks, ind.stacksTextSize, CK(ind.stacksTextColor),
