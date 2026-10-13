@@ -1943,8 +1943,13 @@ ReloadFramesBody = function()
                 EllesmereUI.RoundCorners(frame, 0)
             end
             if power then
-                if det and radius > 0 then
-                    EllesmereUI.RoundCorners(power, radius, {
+                -- A detached bar's own Corner Radius (unset: the frame's).
+                local pRadius = radius
+                if det and us.powerCornerRadius and not frame._blizzArtFrame then
+                    pRadius = us.powerCornerRadius
+                end
+                if det and pRadius > 0 then
+                    EllesmereUI.RoundCorners(power, pRadius, {
                         border = power._pbBorder, style = us.powerBorderStyle or "solid",
                         corners = pCorners,
                     })
