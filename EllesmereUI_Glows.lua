@@ -254,9 +254,59 @@ local function _AntsResolveSize(self, d)
     if not (w > 0 and h > 0 and w + h < math.huge) then return false end
     local sTh = floor(d.th / onePixel + 0.5) * onePixel
     if sTh < onePixel then sTh = onePixel end
-    d.top:SetHeight(sTh); d.bottom:SetHeight(sTh)
-    d.left:SetWidth(sTh); d.right:SetWidth(sTh)
+    -- Rounded (Glows.RoundAnts): the dashes run just OUTSIDE the wrapper, round
+    -- the rounded outline it wraps (on a rounded icon they would otherwise sit
+    -- on its border ring). The strips widen to cover the corner arcs and a ring
+    -- mask cuts them back to the dash width along that outline. Each strip
+    -- stops short of its far corner, so every arc is drawn by one strip only
+    -- (top: top left, right: top right, bottom: bottom right, left: bottom
+    -- left). o: the outset, e: that inset; both 0 while square.
+    local o, e, tk = 0, 0, sTh
+    if d.round then
+        local r = d.round + floor(sTh + 0.5)
+        local cap = floor((w < h and w or h) / 2 + sTh - 0.49)
+        if r > cap then r = cap end
+        if r > EllesmereUI.ROUNDED_MAX_RADIUS then r = EllesmereUI.ROUNDED_MAX_RADIUS end
+        if r >= 1 and EllesmereUI.RoundedRing(self, r, sTh, sTh, d.top, d.bottom, d.left, d.right,
+            d.bgTop, d.bgBottom, d.bgLeft, d.bgRight) then
+            o, e = sTh, r
+            if e > tk then tk = e end
+        else
+            EllesmereUI.RoundedRing(self, 0)
+        end
+    end
+    d.top:SetHeight(tk); d.bottom:SetHeight(tk)
+    d.left:SetWidth(tk); d.right:SetWidth(tk)
+    if (d.inset or 0) ~= e or (d.outset or 0) ~= o then
+        d.inset, d.outset = e, o
+        d.top:SetPoint("TOPLEFT", self, "TOPLEFT", -o, o)
+        d.top:SetPoint("TOPRIGHT", self, "TOPRIGHT", o - e, o)
+        d.right:SetPoint("TOPRIGHT", self, "TOPRIGHT", o, o)
+        d.right:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", o, e - o)
+        d.bottom:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", o, -o)
+        d.bottom:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", e - o, -o)
+        d.left:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", -o, -o)
+        d.left:SetPoint("TOPLEFT", self, "TOPLEFT", -o, o - e)
+    end
+    -- The background strips fill the same band (every Start makes them the
+    -- square ones again).
+    if d.bgTop and (o > 0 or d.bgOut) then
+        d.bgOut = o > 0 or nil
+        local bt = o > 0 and tk or d.th
+        d.bgTop:SetHeight(bt); d.bgBottom:SetHeight(bt)
+        d.bgLeft:SetWidth(bt); d.bgRight:SetWidth(bt)
+        d.bgTop:SetPoint("TOPLEFT", self, "TOPLEFT", -o, o)
+        d.bgTop:SetPoint("TOPRIGHT", self, "TOPRIGHT", o, o)
+        d.bgBottom:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", -o, -o)
+        d.bgBottom:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", o, -o)
+        d.bgLeft:SetPoint("TOPLEFT", self, "TOPLEFT", -o, o)
+        d.bgLeft:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", -o, -o)
+        d.bgRight:SetPoint("TOPRIGHT", self, "TOPRIGHT", o, o)
+        d.bgRight:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", o, -o)
+    end
     d.w = w; d.h = h
+    -- The dashes march round the outline they are drawn on.
+    w, h = w + 2 * o, h + 2 * o
     -- Precompute the per-edge phase endpoints; they are invariant until the
     -- next resize/restart, so only the scroll offset o changes per tick.
     -- ph(P) = P * N / perim is the perimeter position in dash-period units;
@@ -265,6 +315,7 @@ local function _AntsResolveSize(self, d)
     d.wk   = w * k
     d.whk  = (w + h) * k
     d.wwhk = (2 * w + h) * k
+    d.ek   = e * k
     return true
 end
 
@@ -281,11 +332,11 @@ local function _AntsOnUpdate(self, elapsed)
     local N = d.N
     local o = (d.timer / d.period) * N   -- scroll offset (N integer -> seamless wrap)
     -- Direction is clockwise; the bottom/left edges flip their coords to match.
-    local wk, whk, wwhk = d.wk, d.whk, d.wwhk
-    d.top:SetTexCoord(-o, wk - o, 0, 1)
-    d.right:SetTexCoord(0, 1, wk - o, whk - o)
-    d.bottom:SetTexCoord(wwhk - o, whk - o, 0, 1)
-    d.left:SetTexCoord(0, 1, N - o, wwhk - o)
+    local wk, whk, wwhk, ek = d.wk, d.whk, d.wwhk, d.ek
+    d.top:SetTexCoord(-o, wk - ek - o, 0, 1)
+    d.right:SetTexCoord(0, 1, wk - o, whk - ek - o)
+    d.bottom:SetTexCoord(wwhk - ek - o, whk - o, 0, 1)
+    d.left:SetTexCoord(0, 1, N - ek - o, wwhk - o)
 end
 
 -- Static (non-marching) dashes: draw once at the frozen base phase (scroll
@@ -293,11 +344,11 @@ end
 -- dashes stay corner-continuous -- a dashed border rather than marching ants.
 local function _AntsDrawStatic(self, d)
     local N = d.N
-    local wk, whk, wwhk = d.wk, d.whk, d.wwhk
-    d.top:SetTexCoord(0, wk, 0, 1)
-    d.right:SetTexCoord(0, 1, wk, whk)
-    d.bottom:SetTexCoord(wwhk, whk, 0, 1)
-    d.left:SetTexCoord(0, 1, N, wwhk)
+    local wk, whk, wwhk, ek = d.wk, d.whk, d.wwhk, d.ek
+    d.top:SetTexCoord(0, wk - ek, 0, 1)
+    d.right:SetTexCoord(0, 1, wk, whk - ek)
+    d.bottom:SetTexCoord(wwhk - ek, whk, 0, 1)
+    d.left:SetTexCoord(0, 1, N - ek, wwhk)
 end
 
 -- One-shot settler for static mode when the size was not resolved at Start time
@@ -385,6 +436,18 @@ local function StartProceduralAnts(wrapper, N, th, period, lineLen, cr, cg, cb, 
     else
         _Register(wrapper, _AntsOnUpdate, "ants")
     end
+end
+
+-- Corner Radius: running dashes follow a rounded outline of this radius from
+-- their next tick on (nil / 0: square again). Call it after the Start.
+local function RoundProceduralAnts(wrapper, radius)
+    local d = wrapper._euiScrollData
+    if not d then return end
+    radius = (radius and radius > 0) and radius or nil
+    if d.round == radius then return end
+    d.round = radius
+    if not radius then EllesmereUI.RoundedRing(wrapper, 0) end
+    d.w = 0; d.h = 0
 end
 
 local function StopProceduralAnts(wrapper)
@@ -1203,6 +1266,7 @@ EllesmereUI.Glows = {
 
     -- Low-level engines (for addons that need direct control)
     StartProceduralAnts = StartProceduralAnts,
+    RoundAnts           = RoundProceduralAnts,
     StopProceduralAnts  = StopProceduralAnts,
     SetProceduralAntsColor = SetProceduralAntsColor,
     StartButtonGlow     = StartButtonGlow,

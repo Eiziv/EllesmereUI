@@ -40,6 +40,14 @@ if EUI_CLIENT_BLOCKED then return end -- pre-12.1 client failsafe (EllesmereUI_C
 --  the owner's outline: call it after RoundCorners and after anything else
 --  that sets the swipe file. An owner that is not rounded hands the whole of
 --  the caller's file back. All corners round, on a rect no taller than wide.
+--  EllesmereUI.RoundedRadius(owner) is the radius an owner rounds by right
+--  now (after the cap), nil while it does not round.
+--  EllesmereUI.RoundedRing(frame, radius, width, outset, ...) cuts textures
+--  of frame (up to 8, nils are fine) down to a band of that width along a
+--  rounded outline, for art drawn round an edge (a pixel glow's strips). The
+--  outline is frame's rect grown by outset, radius its corner radius.
+--  Returns true once every one of them carries the ring; radius 0 takes it
+--  off again.
 --
 --  Masks: rounded-<r>.tga / rounded-inv-<r>.tga, (2r + 1) texels square
 --  (.tools/rounded-glow/make_rounded_masks.py), sliced at r texels; no larger,
@@ -135,6 +143,7 @@ local state = setmetatable({}, { __mode = "k" })       -- owner -> rounding stat
 local byBorder = setmetatable({}, { __mode = "k" })    -- border frame -> state
 local ownTex = setmetatable({}, { __mode = "k" })      -- our pieces, never masked
 local swiped = setmetatable({}, { __mode = "k" })      -- cooldown -> on a swipe.png cell
+local rings = setmetatable({}, { __mode = "k" })       -- frame -> its ring masks
 local swipeLow, swipeHigh = { x = 0, y = 0 }, { x = 1, y = 1 }
 local hooked = false
 
@@ -753,4 +762,63 @@ function EllesmereUI.RoundedSwipe(owner, cd)
         cd:SetTexCoordRange(swipeLow, swipeHigh)
     end
     return false
+end
+
+function EllesmereUI.RoundedRadius(owner)
+    local st = owner and state[owner]
+    return st and st.on and st.fit or nil
+end
+
+local function RingOff(rg)
+    for tex in pairs(rg.masked) do
+        RemoveMask(tex, rg.outer)
+        RemoveMask(tex, rg.hole)
+    end
+    wipe(rg.masked)
+end
+
+-- Two masks per texture: the rounded outline, and the inverse of the same
+-- outline one band in (the pair the Solid border is cut from).
+function EllesmereUI.RoundedRing(frame, radius, width, outset, ...)
+    if not frame then return false end
+    local rg = rings[frame]
+    radius = min(floor(tonumber(radius) or 0), MAX_RADIUS)
+    if radius <= 0 then
+        if rg then RingOff(rg); rg.radius = nil end
+        return false
+    end
+    if not rg then
+        rg = { outer = frame:CreateMaskTexture(), hole = frame:CreateMaskTexture(), masked = {} }
+        rings[frame] = rg
+    end
+    outset = outset or 0
+    local inner = max(1, floor(radius - width + 0.5))
+    if rg.radius ~= radius or rg.inner ~= inner or rg.width ~= width or rg.outset ~= outset then
+        -- Reshaped only while detached (a mask carries its texture before it is added).
+        RingOff(rg)
+        rg.radius, rg.inner, rg.width, rg.outset = radius, inner, width, outset
+        SetRounded(rg.outer, radius, ALL_CORNERS, "CLAMPTOBLACKADDITIVE")
+        rg.outer:ClearAllPoints()
+        rg.outer:SetPoint("TOPLEFT", frame, "TOPLEFT", -outset, outset)
+        rg.outer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", outset, -outset)
+        rg.hole:SetTexture(ROUNDED_INV[inner * 16 + ALL_CORNERS], "CLAMPTOWHITE", "CLAMPTOWHITE")
+        rg.hole:SetTextureSliceMargins(inner, inner, inner, inner)
+        rg.hole:SetTextureSliceMode(STRETCHED)
+        rg.hole:ClearAllPoints()
+        rg.hole:SetPoint("TOPLEFT", frame, "TOPLEFT", width - outset, outset - width)
+        rg.hole:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", outset - width, width - outset)
+    end
+    local all, masked = true, rg.masked
+    for i = 1, select("#", ...) do
+        local tex = select(i, ...)
+        if tex and not masked[tex] then
+            if AddMask(tex, rg.outer) and AddMask(tex, rg.hole) then
+                masked[tex] = true
+            else
+                RemoveMask(tex, rg.outer)
+                all = false
+            end
+        end
+    end
+    return all
 end
