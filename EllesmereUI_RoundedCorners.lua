@@ -213,6 +213,14 @@ local function Size(region)
     if ok and not (issecretvalue(w) or issecretvalue(h)) then return w, h end
 end
 
+-- A region's shown flag. One that cannot be read (a frame under a restricted
+-- aura button returns a secret) counts as shown: the caller only names a
+-- border it has just shown.
+local function Shown(region)
+    local shown = region:IsShown()
+    return issecretvalue(shown) or shown
+end
+
 -- Half a region's short side, or nil while it is unsized or unreadable.
 local function HalfSide(region)
     local w, h = Size(region)
@@ -614,15 +622,15 @@ local function Fit(st)
     end
     -- A border frame that is the owner itself hides along with the body, so
     -- its own shown flag says nothing (a nameplate cast bar between casts).
-    local cont = border and (border == st.owner or border:IsShown())
+    local cont = border and (border == st.owner or Shown(border))
         and EllesmereUI.PP.GetBorders(border)
-    local edge = cont and cont._top and cont:IsShown()
-        and cont._top:IsShown() and cont._snapEdge or 0
+    local edge = cont and cont._top and Shown(cont)
+        and Shown(cont._top) and cont._snapEdge or 0
     local inner = radius
     if edge > 0 then
         -- Strip width in shape units (the container may run its own scale).
         local cs, rs = cont:GetEffectiveScale(), rect:GetEffectiveScale()
-        if rs > 0 then edge = edge * cs / rs end
+        if not (issecretvalue(cs) or issecretvalue(rs)) and rs > 0 then edge = edge * cs / rs end
         inner = max(1, floor(radius - edge + 0.5))
         -- The inner rect holds the hole's and the body's masks the same way:
         -- past it their corners shrink or overlap and square their ends off,
@@ -634,7 +642,7 @@ local function Fit(st)
         return radius, inner, cont, nil
     end
     local bd = border and EllesmereUI._bdBorderData[border]
-    local glow = st.glowStyle and bd and bd:IsShown() and bd or nil
+    local glow = st.glowStyle and bd and Shown(bd) and bd or nil
     return radius, inner, nil, glow
 end
 
