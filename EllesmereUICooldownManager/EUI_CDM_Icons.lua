@@ -306,13 +306,15 @@ function ns.ApplyShapeToOverlay(icon, oIcon, oCd, barData)
         end
         -- Corner Radius: the copy and its swipe round off with the icon.
         if ifc.rounded then
+            ifc.roundedOverlay = true
             if oIcon then EllesmereUI.RoundedCover(icon, oIcon) end
             if oCd then pcall(EllesmereUI.RoundedSwipe, icon, oCd) end
         end
         return
     end
-    -- The icon left its Corner Radius for this shape: the whole swipe file again.
-    if oCd then pcall(EllesmereUI.RoundedSwipe, icon, oCd) end
+    -- An overlay that took the Corner Radius swipe before this shape: the
+    -- whole swipe file again.
+    if ifc.roundedOverlay and oCd then pcall(EllesmereUI.RoundedSwipe, icon, oCd) end
 
     local zoom = (barData and barData.iconZoom) or 0.08
 
