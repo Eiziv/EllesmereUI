@@ -1836,6 +1836,30 @@ local function ApplyThemeToHost(host, theme, texKey, showBorder)
     end
 end
 
+-- Corner Radius (cfg.cornerRadius; EllesmereUI_RoundedCorners.lua): the
+-- background stack is the body, the bar its shape and its 1-pixel border.
+-- Nothing until a bar first sets a radius.
+local RoundBarHost
+do
+    local NO_ROOTS, textures = {}, {}
+    local opts = { roots = NO_ROOTS, textures = textures, style = "solid" }
+    RoundBarHost = function(host, radius)
+        radius = radius or 0
+        if radius <= 0 and not host._edbRounded then return end
+        if radius > 0 then
+            host._edbRounded = true
+            textures[1], textures[2] = host._edbBgAtlas, host._edbBgOverlay
+            textures[3], textures[4] = host._edbModernBg, host._edbBarTex
+            opts.border = host._edbBorder and host or nil
+            EllesmereUI.RoundCorners(host, radius, opts)
+            textures[1], textures[2], textures[3], textures[4], opts.border = nil, nil, nil, nil, nil
+        else
+            host._edbRounded = nil
+            EllesmereUI.RoundCorners(host, 0)
+        end
+    end
+end
+
 -- Exposed so the options preview strip renders the exact same recipe.
 function ns.MakePreviewBackdrop(host, themeCfg, showBorder)
     ApplyThemeToHost(host, themeCfg, nil, showBorder)
@@ -2279,6 +2303,7 @@ function ns.ApplyBar(id)
 
     ApplyBarPosition(id)
     ApplyThemeToHost(rec.bar, cfg.theme, cfg.barTexture, not cfg.hideBorder)
+    RoundBarHost(rec.bar, cfg.cornerRadius)
 
     -- Reconcile block instances against cfg.blocks
     local want = {}
@@ -2345,6 +2370,7 @@ function ns.ApplyTheme(id)
     local cfg = ns.GetBar(id)
     if not (rec and rec.bar and cfg) then return end
     ApplyThemeToHost(rec.bar, cfg.theme, cfg.barTexture, not cfg.hideBorder)
+    RoundBarHost(rec.bar, cfg.cornerRadius)
 end
 
 function ns.GetLiveAutoLength(barId, blockId)

@@ -23,6 +23,35 @@ local _inCombat = false
 I.inCombatSetters[#I.inCombatSetters + 1] = function(v) _inCombat = v end
 
 -------------------------------------------------------------------------------
+--  Corner Radius (EllesmereUI_RoundedCorners.lua)
+-------------------------------------------------------------------------------
+-- Rounds a square or cropped icon: art, background and out-of-range tint take
+-- the body mask, a Solid / Glow / Shadow border is redrawn round and the swipe
+-- takes the outline. Runs last in ApplyShapeToCDMIcon's square branch (border
+-- and swipe file are set by then); radius 0 takes it all off again. Nothing
+-- until a bar first sets a radius (ifc.rounded).
+local RoundCDMIcon
+do
+    local NO_ROOTS, textures = {}, {}
+    local opts = { roots = NO_ROOTS, textures = textures }
+    RoundCDMIcon = function(icon, ifc, radius, barData, fd, tex, bg, cd)
+        if radius <= 0 and not ifc.rounded then return end
+        if radius > 0 then
+            ifc.rounded = true
+            textures[1], textures[2], textures[3] = tex, bg, icon.OutOfRange
+            opts.style = barData.borderTexture or "solid"
+            opts.border = (fd and fd.borderFrame) or (EllesmereUI.PP.GetBorders(icon) and icon) or nil
+            EllesmereUI.RoundCorners(icon, radius, opts)
+            textures[1], textures[2], textures[3], opts.border = nil, nil, nil, nil
+        else
+            ifc.rounded = nil
+            EllesmereUI.RoundCorners(icon, 0)
+        end
+        if cd then pcall(EllesmereUI.RoundedSwipe, icon, cd) end
+    end
+end
+
+-------------------------------------------------------------------------------
 --  Apply custom shape to a CDM icon
 -------------------------------------------------------------------------------
 ApplyShapeToCDMIcon = function(icon, shape, barData, ssb)
@@ -131,12 +160,15 @@ ApplyShapeToCDMIcon = function(icon, shape, barData, ssb)
         if bg then
             bg:ClearAllPoints(); bg:SetAllPoints()
         end
+        RoundCDMIcon(icon, ifc, blizzArt and 0 or (barData.cornerRadius or 0), barData, fd, tex, bg, cd)
         return
     end
 
     -- Custom shape
     local maskTex = CDM_SHAPES.masks[shape]
     if not maskTex then return end
+    -- A custom shape replaces the Corner Radius.
+    RoundCDMIcon(icon, ifc, 0, barData, fd, tex, bg, cd)
 
     if not ifc.shapeMask then
         ifc.shapeMask = icon:CreateMaskTexture()
@@ -272,8 +304,15 @@ function ns.ApplyShapeToOverlay(icon, oIcon, oCd, barData)
             pcall(oCd.SetSwipeTexture, oCd, "Interface\\AddOns\\EllesmereUI\\media\\white-square.png")
             if oCd.SetUseCircularEdge then pcall(oCd.SetUseCircularEdge, oCd, false) end
         end
+        -- Corner Radius: the copy and its swipe round off with the icon.
+        if ifc.rounded then
+            if oIcon then EllesmereUI.RoundedCover(icon, oIcon) end
+            if oCd then pcall(EllesmereUI.RoundedSwipe, icon, oCd) end
+        end
         return
     end
+    -- The icon left its Corner Radius for this shape: the whole swipe file again.
+    if oCd then pcall(EllesmereUI.RoundedSwipe, icon, oCd) end
 
     local zoom = (barData and barData.iconZoom) or 0.08
 

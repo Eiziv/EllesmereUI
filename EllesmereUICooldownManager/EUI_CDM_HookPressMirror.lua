@@ -211,6 +211,9 @@ do
                 ov._blizzMask = bm
             end
         end
+        -- Corner Radius: the fill rounds off with the icon.
+        local ifcR = _ecmeFC and _ecmeFC[icon]
+        if ifcR and ifcR.rounded then EllesmereUI.RoundedCover(icon, ov._tex) end
         local result, cr, cg, cb, bsz = style(ov._tex)
         if not result then ov:Hide(); return nil end
         -- Shaped icons expand their icon texture past the frame (and expand the

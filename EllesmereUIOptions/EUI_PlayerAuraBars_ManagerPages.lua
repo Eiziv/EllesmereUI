@@ -1340,6 +1340,25 @@ local function BuildDisplayFields(frame, fontPath, sy, cfg, apply, isBuff)
         swatch:SetPoint("RIGHT", rgn._lastInline or rgn._control, "LEFT", -8, 0)
         rgn._lastInline = swatch
         EllesmereUI.RegisterWidgetRefresh(updateSwatch)
+        -- Corner Radius (EllesmereUI_RoundedCorners.lua): an inline cog left of
+        -- the swatch. A plain icon with a Solid border only.
+        EllesmereUI.BlizzStyle.BlockInline("playerauras", EllesmereUI.BuildInlineCog(rgn, {
+            title = "Corner Radius", tip = "Corner Radius",
+            disabled = function()
+                return (cfg.iconShape and cfg.iconShape ~= "none") or (cfg.borderTexture or "solid") ~= "solid"
+            end,
+            disabledTooltip = function()
+                if cfg.iconShape and cfg.iconShape ~= "none" then
+                    return "This option requires a non-custom shape to be selected"
+                end
+                return "This option requires the Border Style to be set to Solid"
+            end,
+            rows = {
+                { type = "slider", label = "Corner Radius", min = 0, max = EllesmereUI.ROUNDED_MAX_RADIUS, step = 1,
+                  get = function() return cfg.cornerRadius or 0 end,
+                  set = function(v) cfg.cornerRadius = v > 0 and v or nil; apply() end },
+            },
+        }))
     end
     do
         local rgn = styleRow._rightRegion
@@ -1366,6 +1385,7 @@ local function BuildDisplayFields(frame, fontPath, sy, cfg, apply, isBuff)
             end
             entry.cfg.borderR, entry.cfg.borderG, entry.cfg.borderB, entry.cfg.borderA =
                 cfg.borderR, cfg.borderG, cfg.borderB, cfg.borderA
+            entry.cfg.cornerRadius = cfg.cornerRadius
             PabApplyBarEntry(entry)
         end
         EllesmereUI.BuildSyncIcon({

@@ -2155,6 +2155,28 @@ function ns.UFO_BuildPowerBarSection(parent, y, ctx)
         pbSwatch:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
         rightRgn._lastInline = pbSwatch
         EllesmereUI.RegisterWidgetRefresh(function() updatePBSwatch() end)
+        -- Corner Radius of a detached Power Bar (EllesmereUI_RoundedCorners.lua);
+        -- until it is set the bar takes the frame's own radius.
+        local function PowerDetached()
+            local pos = SVal("powerPosition", "below")
+            return pos == "detached_top" or pos == "detached_bottom"
+        end
+        local radiusCog = EllesmereUI.BuildInlineCog(rightRgn, {
+            title = "Corner Radius", tip = "Corner Radius",
+            disabled = function()
+                return not PowerDetached() or not EllesmereUI.RoundedStyleOK(SGet("powerBorderStyle"))
+            end,
+            disabledTooltip = function()
+                if not PowerDetached() then return "This option requires a Detached Bar Position" end
+                return "This option requires the Solid, Glow or Shadow border style."
+            end,
+            rows = {
+                { type = "slider", label = "Corner Radius", min = 0, max = EllesmereUI.ROUNDED_MAX_RADIUS, step = 1,
+                  get = function() return SGet("powerCornerRadius") or SVal("cornerRadius", 0) end,
+                  set = function(v) SDB().powerCornerRadius = v; ReloadAndUpdate() end },
+            },
+        })
+        EllesmereUI.BlizzStyle.BlockInline("unitframes", radiusCog)
     end
 
     -- Spell Cost Prediction (player only, WoW Forever only; the page rebuilds

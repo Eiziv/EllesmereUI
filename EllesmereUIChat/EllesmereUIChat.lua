@@ -667,6 +667,41 @@ function ECHAT.ApplyExtendedBackground()
             border:Hide()
         end
     end
+    -- Corner Radius of the panel (cfg.panelCornerRadius;
+    -- EllesmereUI_RoundedCorners.lua): the panel border frame is the shape and
+    -- hosts the mask, the fills inside it are the body: the tab strip, the
+    -- docked windows' backgrounds and a joined sidebar. Only while that frame
+    -- shows (a hidden mask would blank what it masks). Nothing until a radius
+    -- is first set.
+    local radius = (border and border:IsShown() and not ns.ChatStock() and cfg.panelCornerRadius) or 0
+    if radius > 0 or ns._chatPanelRounded then
+        ns._chatPanelRounded = radius > 0 or nil
+        if radius > 0 then
+            local opts = ns._chatRoundOpts
+            if not opts then
+                opts = { roots = {}, textures = {} }
+                ns._chatRoundOpts = opts
+            end
+            local tex, n = opts.textures, 1
+            tex[1] = bg1:GetRegions()
+            if extend and ns._chatBgExtTex then n = n + 1; tex[n] = ns._chatBgExtTex end
+            if sb and not cfg.hideSidebarBg and SidebarParticipatesInLayout(cfg) and cfg.sidebarSeparate ~= true then
+                n = n + 1; tex[n] = sb:GetRegions()
+                if d1.sidebarExtTex then n = n + 1; tex[n] = d1.sidebarExtTex end
+            end
+            for i = 2, 20 do
+                if n >= 8 then break end
+                local cf = _G["ChatFrame" .. i]
+                local bg = cf and cf.isDocked and CFD(cf).bg
+                if bg then n = n + 1; tex[n] = bg:GetRegions() end
+            end
+            for i = n + 1, 8 do tex[i] = nil end
+            opts.border, opts.rect, opts.style = border, border, cfg.panelBorderTexture or "solid"
+            EllesmereUI.RoundCorners(border, radius, opts)
+        else
+            EllesmereUI.RoundCorners(border, 0)
+        end
+    end
     if ECHAT.ApplyTabBorders then ECHAT.ApplyTabBorders() end
     if ECHAT.ApplyTabSeparators then ECHAT.ApplyTabSeparators() end
     if ECHAT.ApplyTabAppearance then ECHAT.ApplyTabAppearance() end

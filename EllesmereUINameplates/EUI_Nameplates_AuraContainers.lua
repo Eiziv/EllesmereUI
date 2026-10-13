@@ -425,6 +425,9 @@ local function BuildNPStyle(kind, variant)
         -- Border still wins over the custom border.
         border = (not ns.GetIconBorderEnabled or ns.GetIconBorderEnabled(kind))
             and (NPIconCustomBorderOn() and NPCustomIconBorder() or { 0, 0, 0, 1, size = 1 }) or false,
+        -- Aura Icon Radius (the Corner Radius cog; AuraKit rounds the art, a
+        -- Solid border and the swipe).
+        cornerRadius = (not blizz and (PVal("auraCornerRadius") or 0) > 0) and PVal("auraCornerRadius") or nil,
         blizzRoundArt = (blizz and not classic) or nil,
         -- The WoW Forever variant keeps that client's own ring (AuraKit
         -- paints the retail one through EllesmereUI.StockAtlas otherwise).
@@ -1731,7 +1734,7 @@ local function StyleFPFor(kind, idx)
             PVal("customBorderOffset"), PVal("customBorderOffsetY"),
             PVal("customBorderShiftX"), PVal("customBorderShiftY"))
     end
-    return FP(kind, size, height, durFP, stkFP, purge,
+    return FP(kind, size, height, durFP, stkFP, purge, PVal("auraCornerRadius") or 0,
         EllesmereUI.GetFontPath("nameplates") or "",
         -- NOT `fn(kind) or true`: the getter legitimately returns false, and
         -- `false or true` would pin this fingerprint input to a constant so

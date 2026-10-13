@@ -33,12 +33,35 @@ if EUI_CLIENT_BLOCKED then return end -- pre-12.1 client failsafe (EllesmereUI_C
 --  and the caller runs RoundCorners, while the owner is not rounded, while a
 --  body texture is left without the mask (the walk tries it again) or when no
 --  corner rounds.
+--  EllesmereUI.RoundedCover(owner, tex) adds a texture drawn over the body
+--  from outside it (an overlay's copy of the art) to the body, for as long as
+--  the owner rounds; nothing while the owner never rounded.
+--  EllesmereUI.RoundedSwipe(owner, cd) gives a Cooldown over the owner's rect
+--  the owner's outline: call it after RoundCorners and after anything else
+--  that sets the swipe file. An owner that is not rounded hands the whole of
+--  the caller's file back. All corners round, on a rect no taller than wide.
+--  w, h: the rect's size, for a caller whose rect cannot be read (an engine
+--  aura button).
+--  RoundCorners returns true once every body texture carries the mask, false
+--  while one could not take it (three masks already, or a denied call).
+--  EllesmereUI.RoundedRadius(owner) is the radius an owner rounds by right
+--  now (after the cap), nil while it does not round.
+--  EllesmereUI.RoundedRing(frame, radius, width, outset, ...) cuts textures
+--  of frame (up to 8, nils are fine) down to a band of that width along a
+--  rounded outline, for art drawn round an edge (a pixel glow's strips). The
+--  outline is frame's rect grown by outset, radius its corner radius.
+--  Returns true once every one of them carries the ring; radius 0 takes it
+--  off again.
 --
 --  Masks: rounded-<r>.tga / rounded-inv-<r>.tga, (2r + 1) texels square
 --  (.tools/rounded-glow/make_rounded_masks.py), sliced at r texels; no larger,
 --  since the client shrinks the corners of a sliced texture bigger than its
 --  region. rounded-<r>-<c>.tga / rounded-inv-<r>-<c>.tga: the same with only
 --  the corners in c round, the rest square.
+--  Swipe: a Cooldown draws its swipe from one stretched file (no mask, no
+--  slices), so it takes a cell of swipe.png, a sheet of rounded rects by
+--  radius and proportions (.tools/rounded-glow/make_rounded_swipe.py), the
+--  radius rounded up so the swipe never pokes out of the outline.
 --  Body: a texture takes at most 3 masks, so each body texture gets ONE
 --  nine-sliced rounded-rect mask, hosted on the owner (an ancestor of every
 --  body texture, so it reaches into SetClipsChildren frames too). The bar
@@ -69,6 +92,7 @@ if not EllesmereUI then return end
 local MEDIA = "Interface\\AddOns\\EllesmereUI\\media\\rounded\\"
 local GLOW_EDGE = "Interface\\AddOns\\EllesmereUI\\media\\borders\\glow-border"
 local MAX_RADIUS = 16 -- rounded-1.tga .. rounded-16.tga
+local SNAP = 0.01
 local ALL_CORNERS = 15
 -- Glow corner art (the generator's constants match these): glow-corner-1..NA
 -- for a radius of at least half the glow width E, by f = band width / radius
@@ -77,8 +101,13 @@ local ALL_CORNERS = 15
 -- the arc center).
 local GLOW_FMIN, GLOW_NA, GLOW_NB = 0.03, 32, 12
 local GLOW_LOGSTEP = math.log(2 / GLOW_FMIN) / (GLOW_NA - 1)
+-- swipe.png (the generator's constants match these): SWIPE_COLS columns by
+-- radius in 64ths of the rect's height, SWIPE_ROWS rows by height / width in
+-- even steps from 0.5 to 1, cells of SWIPE_CELL texels.
+local SWIPE = MEDIA .. "swipe.png"
+local SWIPE_COLS, SWIPE_ROWS, SWIPE_CELL = 32, 8, 64
 local STRETCHED = Enum.UITextureSliceMode.Stretched
-local floor, min, max, log, exp = math.floor, math.min, math.max, math.log, math.exp
+local floor, ceil, min, max, log, exp = math.floor, math.ceil, math.min, math.max, math.log, math.exp
 local pairs, select, pcall = pairs, select, pcall
 
 -- Media paths by number, built on first use.
@@ -118,6 +147,9 @@ local EMPTY = {}
 local state = setmetatable({}, { __mode = "k" })       -- owner -> rounding state
 local byBorder = setmetatable({}, { __mode = "k" })    -- border frame -> state
 local ownTex = setmetatable({}, { __mode = "k" })      -- our pieces, never masked
+local swiped = setmetatable({}, { __mode = "k" })      -- cooldown -> on a swipe.png cell
+local rings = setmetatable({}, { __mode = "k" })       -- frame -> its ring masks
+local swipeLow, swipeHigh = { x = 0, y = 0 }, { x = 1, y = 1 }
 local hooked = false
 
 EllesmereUI.ROUNDED_MAX_RADIUS = MAX_RADIUS
@@ -174,10 +206,17 @@ local function SetRounded(obj, radius, corners, wrap)
     obj:SetTextureSliceMode(STRETCHED)
 end
 
--- Half a region's short side, or nil while it is unsized or secret.
+-- A region's size, or nil while it is secret or the read is denied (a frame
+-- anchored to restricted geometry).
+local function Size(region)
+    local ok, w, h = pcall(region.GetSize, region)
+    if ok and not (issecretvalue(w) or issecretvalue(h)) then return w, h end
+end
+
+-- Half a region's short side, or nil while it is unsized or unreadable.
 local function HalfSide(region)
-    local w, h = region:GetSize()
-    if issecretvalue(w) or issecretvalue(h) then return nil end
+    local w, h = Size(region)
+    if not w then return nil end
     local half = min(w, h) / 2
     if half > 0 then return half end
 end
@@ -268,6 +307,10 @@ local function MaskBody(st, roots, singles, radius, cont, skip)
     for i = 1, 8 do
         local tex = singles[i]
         if tex then Seat(tex) end
+    end
+    local cover = st.cover
+    if cover then
+        for tex in pairs(cover) do Seat(tex) end
     end
     st.missed = wMissed
     wMasked, wMask, wSkip = nil, nil, nil
@@ -562,9 +605,11 @@ local function Fit(st)
     -- A radius-r mask is 2r + 1 texels square, and the client shrinks a sliced
     -- texture's corners on a region smaller than the texture: the radius stays
     -- at most (short side - 1) / 2, so the region always holds its mask.
+    -- SNAP: a pixel-snapped side reads a hair under its whole size (4.99999),
+    -- which would cost a thin bar one of the two units it can round by.
     local half = HalfSide(rect)
     if half and half >= 1 then
-        local cap = max(1, floor(half - 0.5))
+        local cap = max(1, floor(half - 0.5 + SNAP))
         if radius > cap then radius = cap end
     end
     -- A border frame that is the owner itself hides along with the body, so
@@ -583,7 +628,7 @@ local function Fit(st)
         -- past it their corners shrink or overlap and square their ends off,
         -- so a thin bar's body would poke out past the ring.
         if half then
-            local cap = floor(half - edge - 0.5)
+            local cap = floor(half - edge - 0.5 + SNAP)
             if cap >= 1 and inner > cap then inner = cap end
         end
         return radius, inner, cont, nil
@@ -604,6 +649,7 @@ Refit = function(owner)
     local st = state[owner]
     if not (st and st.on) then return end
     local radius, inner, cont, glow = Fit(st)
+    st.fit = radius
     ReseatMask(st, inner, cont)
     Paint(st, radius, inner, cont, glow)
 end
@@ -658,12 +704,14 @@ function EllesmereUI.RoundCorners(owner, radius, opts)
         end
     end
     local r, inner, cont, glow = Fit(st)
+    st.fit = r
     MaskBody(st, roots, opts.textures or EMPTY, inner, cont, border)
     Paint(st, r, inner, cont, glow)
     if not st.on then
         st.on = true
         EllesmereUI.RegisterPxReapply(owner, Refit)
     end
+    return not st.missed
 end
 
 -- A RoundCorners pass with only opts.corners changed: the body keeps its
@@ -678,4 +726,110 @@ function EllesmereUI.RoundedSetCorners(owner, corners)
     if st.border then byBorder[st.border] = st end
     Refit(owner)
     return true
+end
+
+-- A texture drawn over the owner's body from outside it joins the body: now,
+-- and on every later pass (weak: it goes with its frame).
+function EllesmereUI.RoundedCover(owner, tex)
+    local st = owner and state[owner]
+    if not (st and tex) then return end
+    local cover = st.cover
+    if not cover then
+        cover = setmetatable({}, { __mode = "k" })
+        st.cover = cover
+    end
+    cover[tex] = true
+    if st.on and not st.masked[tex] and AddMask(tex, st.mask) then
+        st.masked[tex] = st.gen
+    end
+end
+
+-- The swipe.png cell for the owner's outline on cd, set after the file as a
+-- sheet needs (true), or the whole file again once the owner no longer
+-- rounds (false; the file is the caller's to set).
+function EllesmereUI.RoundedSwipe(owner, cd, w, h)
+    if not cd then return false end
+    local st = owner and state[owner]
+    if st and st.on then
+        if not w then w, h = Size(st.rect) end
+        if w and w > 0 and h > 0 then
+            local col = Clamp(ceil(st.fit * 64 / h - 0.001), 1, SWIPE_COLS)
+            local row = Clamp(floor((h / w - 0.5) * 2 * (SWIPE_ROWS - 1) + 0.5) + 1, 1, SWIPE_ROWS)
+            -- Half a texel in from the cell's edges: no neighbour bleeds in.
+            local tw, th = SWIPE_COLS * SWIPE_CELL, SWIPE_ROWS * SWIPE_CELL
+            swipeLow.x = ((col - 1) * SWIPE_CELL + 0.5) / tw
+            swipeLow.y = ((row - 1) * SWIPE_CELL + 0.5) / th
+            swipeHigh.x = (col * SWIPE_CELL - 0.5) / tw
+            swipeHigh.y = (row * SWIPE_CELL - 0.5) / th
+            cd:SetSwipeTexture(SWIPE)
+            cd:SetTexCoordRange(swipeLow, swipeHigh)
+            swiped[cd] = true
+            return true
+        end
+    end
+    if swiped[cd] then
+        swiped[cd] = nil
+        swipeLow.x, swipeLow.y, swipeHigh.x, swipeHigh.y = 0, 0, 1, 1
+        cd:SetTexCoordRange(swipeLow, swipeHigh)
+    end
+    return false
+end
+
+function EllesmereUI.RoundedRadius(owner)
+    local st = owner and state[owner]
+    return st and st.on and st.fit or nil
+end
+
+local function RingOff(rg)
+    for tex in pairs(rg.masked) do
+        RemoveMask(tex, rg.outer)
+        RemoveMask(tex, rg.hole)
+    end
+    wipe(rg.masked)
+end
+
+-- Two masks per texture: the rounded outline, and the inverse of the same
+-- outline one band in (the pair the Solid border is cut from).
+function EllesmereUI.RoundedRing(frame, radius, width, outset, ...)
+    if not frame then return false end
+    local rg = rings[frame]
+    radius = min(floor(tonumber(radius) or 0), MAX_RADIUS)
+    if radius <= 0 then
+        if rg then RingOff(rg); rg.radius = nil end
+        return false
+    end
+    if not rg then
+        rg = { outer = frame:CreateMaskTexture(), hole = frame:CreateMaskTexture(), masked = {} }
+        rings[frame] = rg
+    end
+    outset = outset or 0
+    local inner = max(1, floor(radius - width + 0.5))
+    if rg.radius ~= radius or rg.inner ~= inner or rg.width ~= width or rg.outset ~= outset then
+        -- Reshaped only while detached (a mask carries its texture before it is added).
+        RingOff(rg)
+        rg.radius, rg.inner, rg.width, rg.outset = radius, inner, width, outset
+        SetRounded(rg.outer, radius, ALL_CORNERS, "CLAMPTOBLACKADDITIVE")
+        rg.outer:ClearAllPoints()
+        rg.outer:SetPoint("TOPLEFT", frame, "TOPLEFT", -outset, outset)
+        rg.outer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", outset, -outset)
+        rg.hole:SetTexture(ROUNDED_INV[inner * 16 + ALL_CORNERS], "CLAMPTOWHITE", "CLAMPTOWHITE")
+        rg.hole:SetTextureSliceMargins(inner, inner, inner, inner)
+        rg.hole:SetTextureSliceMode(STRETCHED)
+        rg.hole:ClearAllPoints()
+        rg.hole:SetPoint("TOPLEFT", frame, "TOPLEFT", width - outset, outset - width)
+        rg.hole:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", outset - width, width - outset)
+    end
+    local all, masked = true, rg.masked
+    for i = 1, select("#", ...) do
+        local tex = select(i, ...)
+        if tex and not masked[tex] then
+            if AddMask(tex, rg.outer) and AddMask(tex, rg.hole) then
+                masked[tex] = true
+            else
+                RemoveMask(tex, rg.outer)
+                all = false
+            end
+        end
+    end
+    return all
 end
