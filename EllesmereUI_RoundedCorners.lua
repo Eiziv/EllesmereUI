@@ -69,6 +69,7 @@ if not EllesmereUI then return end
 local MEDIA = "Interface\\AddOns\\EllesmereUI\\media\\rounded\\"
 local GLOW_EDGE = "Interface\\AddOns\\EllesmereUI\\media\\borders\\glow-border"
 local MAX_RADIUS = 16 -- rounded-1.tga .. rounded-16.tga
+local SNAP = 0.01
 local ALL_CORNERS = 15
 -- Glow corner art (the generator's constants match these): glow-corner-1..NA
 -- for a radius of at least half the glow width E, by f = band width / radius
@@ -562,9 +563,11 @@ local function Fit(st)
     -- A radius-r mask is 2r + 1 texels square, and the client shrinks a sliced
     -- texture's corners on a region smaller than the texture: the radius stays
     -- at most (short side - 1) / 2, so the region always holds its mask.
+    -- SNAP: a pixel-snapped side reads a hair under its whole size (4.99999),
+    -- which would cost a thin bar one of the two units it can round by.
     local half = HalfSide(rect)
     if half and half >= 1 then
-        local cap = max(1, floor(half - 0.5))
+        local cap = max(1, floor(half - 0.5 + SNAP))
         if radius > cap then radius = cap end
     end
     -- A border frame that is the owner itself hides along with the body, so
@@ -583,7 +586,7 @@ local function Fit(st)
         -- past it their corners shrink or overlap and square their ends off,
         -- so a thin bar's body would poke out past the ring.
         if half then
-            local cap = floor(half - edge - 0.5)
+            local cap = floor(half - edge - 0.5 + SNAP)
             if cap >= 1 and inner > cap then inner = cap end
         end
         return radius, inner, cont, nil
