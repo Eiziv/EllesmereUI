@@ -40,6 +40,10 @@ if EUI_CLIENT_BLOCKED then return end -- pre-12.1 client failsafe (EllesmereUI_C
 --  the owner's outline: call it after RoundCorners and after anything else
 --  that sets the swipe file. An owner that is not rounded hands the whole of
 --  the caller's file back. All corners round, on a rect no taller than wide.
+--  w, h: the rect's size, for a caller whose rect cannot be read (an engine
+--  aura button).
+--  RoundCorners returns true once every body texture carries the mask, false
+--  while one could not take it (three masks already, or a denied call).
 --
 --  Masks: rounded-<r>.tga / rounded-inv-<r>.tga, (2r + 1) texels square
 --  (.tools/rounded-glow/make_rounded_masks.py), sliced at r texels; no larger,
@@ -192,10 +196,25 @@ local function SetRounded(obj, radius, corners, wrap)
     obj:SetTextureSliceMode(STRETCHED)
 end
 
--- Half a region's short side, or nil while it is unsized or secret.
+-- A region's size, or nil while it is secret or the read is denied (a frame
+-- anchored to restricted geometry).
+local function Size(region)
+    local ok, w, h = pcall(region.GetSize, region)
+    if ok and not (issecretvalue(w) or issecretvalue(h)) then return w, h end
+end
+
+-- A region's shown flag. One that cannot be read (a frame under a restricted
+-- aura button returns a secret) counts as shown: the caller only names a
+-- border it has just shown.
+local function Shown(region)
+    local shown = region:IsShown()
+    return issecretvalue(shown) or shown
+end
+
+-- Half a region's short side, or nil while it is unsized or unreadable.
 local function HalfSide(region)
-    local w, h = region:GetSize()
-    if issecretvalue(w) or issecretvalue(h) then return nil end
+    local w, h = Size(region)
+    if not w then return nil end
     local half = min(w, h) / 2
     if half > 0 then return half end
 end
@@ -585,8 +604,7 @@ local function Fit(st)
     -- texture's corners on a region smaller than the texture: the radius stays
     -- at most (short side - 1) / 2, so the region always holds its mask.
     -- The size is kept for RoundedSwipe, so its calls between passes read nothing.
-    local w, h = rect:GetSize()
-    if issecretvalue(w) or issecretvalue(h) then w, h = nil, nil end
+    local w, h = Size(rect)
     st.w, st.h = w, h
     local half = w and min(w, h) / 2
     if half and half >= 1 then
@@ -595,15 +613,15 @@ local function Fit(st)
     end
     -- A border frame that is the owner itself hides along with the body, so
     -- its own shown flag says nothing (a nameplate cast bar between casts).
-    local cont = border and (border == st.owner or border:IsShown())
+    local cont = border and (border == st.owner or Shown(border))
         and EllesmereUI.PP.GetBorders(border)
-    local edge = cont and cont._top and cont:IsShown()
-        and cont._top:IsShown() and cont._snapEdge or 0
+    local edge = cont and cont._top and Shown(cont)
+        and Shown(cont._top) and cont._snapEdge or 0
     local inner = radius
     if edge > 0 then
         -- Strip width in shape units (the container may run its own scale).
         local cs, rs = cont:GetEffectiveScale(), rect:GetEffectiveScale()
-        if rs > 0 then edge = edge * cs / rs end
+        if not (issecretvalue(cs) or issecretvalue(rs)) and rs > 0 then edge = edge * cs / rs end
         inner = max(1, floor(radius - edge + 0.5))
         -- The inner rect holds the hole's and the body's masks the same way:
         -- past it their corners shrink or overlap and square their ends off,
@@ -615,7 +633,7 @@ local function Fit(st)
         return radius, inner, cont, nil
     end
     local bd = border and EllesmereUI._bdBorderData[border]
-    local glow = st.glowStyle and bd and bd:IsShown() and bd or nil
+    local glow = st.glowStyle and bd and Shown(bd) and bd or nil
     return radius, inner, nil, glow
 end
 
@@ -692,6 +710,7 @@ function EllesmereUI.RoundCorners(owner, radius, opts)
         st.on = true
         EllesmereUI.RegisterPxReapply(owner, Refit)
     end
+    return not st.missed
 end
 
 -- A RoundCorners pass with only opts.corners changed: the body keeps its
@@ -727,11 +746,11 @@ end
 -- The swipe.png cell for the owner's outline on cd, set after the file as a
 -- sheet needs (true), or the whole file again once the owner no longer
 -- rounds (false; the file is the caller's to set).
-function EllesmereUI.RoundedSwipe(owner, cd)
+function EllesmereUI.RoundedSwipe(owner, cd, w, h)
     if not cd then return false end
     local st = owner and state[owner]
     if st and st.on then
-        local w, h = st.w, st.h
+        if not w then w, h = st.w, st.h end
         if w and w > 0 and h > 0 then
             local col = Clamp(ceil(st.fit * 64 / h - 0.001), 1, SWIPE_COLS)
             local row = Clamp(floor((h / w - 0.5) * 2 * (SWIPE_ROWS - 1) + 0.5) + 1, 1, SWIPE_ROWS)

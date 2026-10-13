@@ -1257,7 +1257,7 @@ local PET_AURA_KEYS = {
     showAuraTooltips = 1,
     buffIconZoom = 2, debuffIconZoom = 2,
     auraBorderR = 2, auraBorderG = 2, auraBorderB = 2, auraBorderA = 2,
-    auraBorderSize = 2, auraBorderSizePx = 2, auraBorderTexture = 2,
+    auraBorderSize = 2, auraBorderSizePx = 2, auraBorderTexture = 2, auraCornerRadius = 2,
     auraBorderTextureOffset = 2, auraBorderTextureOffsetY = 2,
     auraBorderTextureShiftX = 2, auraBorderTextureShiftY = 2,
     auraBorderBehind = 2, auraBorderBehindUnitFrame = 2, auraBorderDispelTextured = 2,
@@ -1514,7 +1514,7 @@ local function StyleTableFP(st, font)
         b and b.texture, b and b.size, b and b.edgePx, b and b[1], b and b[2], b and b[3], b and b[4],
         b and b.offsetX, b and b.offsetY, b and b.shiftX, b and b.shiftY,
         b and b.behind, b and b.behindUnitFrame, b and b.unitFrameLevel,
-        st.auraBorderAboveEffects,
+        st.cornerRadius, st.auraBorderAboveEffects,
         st.noTooltips, st.blizzBorder, st.dispelBorder,
         -- Textured Dispel Ring (the ring's art key) and Use Dispel Colors (the
         -- palette fingerprint the colour map was built from).
@@ -1701,6 +1701,8 @@ local function BuildStyle(unit, base, s, unitFrame)
         -- Show Tooltip For -> Buffs & Debuffs (per-unit, default on). Motion
         -- goes off with the tooltips; clicks (player buff cancel) unaffected.
         noTooltips = (s.showAuraTooltips == false) or nil,
+        -- Corner Radius (the Border Size cog; AuraKit rounds a Solid border only).
+        cornerRadius = (not blizz and (s.auraCornerRadius or 0) > 0) and s.auraCornerRadius or nil,
         dispelBorder = dispel,
         dispelHelpful = (isBuff and dispel) or nil,
         dispelBorderTexture = dispelTex,
