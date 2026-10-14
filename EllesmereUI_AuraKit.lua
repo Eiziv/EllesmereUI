@@ -296,15 +296,17 @@ do
         end
         -- The cap RoundCorners sets from a size it may not be able to read here.
         radius = math.min(radius, math.floor(math.min(w, h) / 2 - 0.49))
-        local key = radius > 0
-            and (radius .. "|" .. w .. "|" .. h .. "|" .. tostring(b and (b.edgePx or b.size))) or nil
-        if d.akRoundKey == key then
-            -- A color-only restyle: the ring follows the strips.
-            if key and b then
+        local on = radius > 0
+        local edge = b and (b.edgePx or b.size)
+        if (d.akRoundKey or false) == on and (not on or (d.akRoundR == radius
+            and d.akRoundW == w and d.akRoundH == h and d.akRoundE == edge)) then
+            -- Unchanged: a color-only restyle at most, and the ring follows the strips.
+            if on and b then
                 EllesmereUI.RoundedBorderColor(d.borderHost, b[1] or 0, b[2] or 0, b[3] or 0, b[4] or 1)
             end
             return
         end
+        local key = on or nil
         local ok, seated
         if key then
             textures[1] = d.icon
@@ -317,6 +319,7 @@ do
         end
         if ok then
             d.akRoundKey = key
+            d.akRoundR, d.akRoundW, d.akRoundH, d.akRoundE = radius, w, h, edge
         elseif d.styleKey and AK.AurasRestricted() then
             deferredRestyles[d.styleKey] = true
         end

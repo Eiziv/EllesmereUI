@@ -29,9 +29,10 @@ I.inCombatSetters[#I.inCombatSetters + 1] = function(v) _inCombat = v end
 -- the body mask, a Solid / Glow / Shadow border is redrawn round and the swipe
 -- takes the outline. Runs last in ApplyShapeToCDMIcon's square branch (the
 -- border is set by then); radius 0 takes it all off again. Icon restyles run
--- on most reanchors, so the rounding pass itself runs only when one of its
--- inputs moved (ifc.rk*); every restyle re-asserts the swipe cell, which reads
--- nothing. Nothing until a bar first sets a radius (ifc.rounded).
+-- on most reanchors, so the whole pass, swipe cell included, runs only when
+-- one of its inputs moved (ifc.rk*). Nothing else sets these swipes after
+-- creation: Blizzard's only in its template, ours not while rounded. Nothing
+-- until a bar first sets a radius (ifc.rounded).
 local RoundCDMIcon
 do
     local NO_ROOTS, textures = {}, {}
@@ -55,8 +56,8 @@ do
                 opts.border = (fd and fd.borderFrame) or (EllesmereUI.PP.GetBorders(icon) and icon) or nil
                 EllesmereUI.RoundCorners(icon, radius, opts)
                 textures[1], textures[2], textures[3], opts.border = nil, nil, nil, nil
+                if cd then pcall(EllesmereUI.RoundedSwipe, icon, cd) end
             end
-            if cd then pcall(EllesmereUI.RoundedSwipe, icon, cd) end
         else
             ifc.rounded, ifc.rkRadius = nil, nil
             EllesmereUI.RoundCorners(icon, 0)

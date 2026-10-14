@@ -3391,15 +3391,18 @@ function ns.ERB_RoundBar(bar, cfg)
 end
 -- Cast bar: the frame is the shape (fill and an attached icon), the clipping
 -- bar, the background and that icon the body. A free icon sits outside it.
-function ns.ERB_RoundCast(frame, cb, stock, iconIn)
-    if not frame then return end
-    local radius = (not stock and cb.cornerRadius) or 0
-    if radius <= 0 then EllesmereUI.RoundCorners(frame, 0); return end
-    EllesmereUI.RoundCorners(frame, radius, {
-        roots = { frame._barClip, iconIn and frame._iconFrame or nil },
-        textures = { frame._bg },
-        border = frame._border, style = cb.borderTexture or "solid",
-    })
+do
+    local roots, textures = {}, {}
+    local opts = { roots = roots, textures = textures }
+    function ns.ERB_RoundCast(frame, cb, stock, iconIn)
+        if not frame then return end
+        local radius = (not stock and cb.cornerRadius) or 0
+        if radius <= 0 then EllesmereUI.RoundCorners(frame, 0); return end
+        roots[1], roots[2], textures[1] = frame._barClip, iconIn and frame._iconFrame or nil, frame._bg
+        opts.border, opts.style = frame._border, cb.borderTexture or "solid"
+        EllesmereUI.RoundCorners(frame, radius, opts)
+        roots[1], roots[2], textures[1], opts.border = nil, nil, nil, nil
+    end
 end
 -- Class resource: the whole row rounds its outline; with Border on Pips each
 -- shown pip (or rune) also rounds inside its own border (pips only show from
