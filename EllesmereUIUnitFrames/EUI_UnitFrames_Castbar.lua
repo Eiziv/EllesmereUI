@@ -200,6 +200,32 @@ end
 -- own edgePx registration. Stands down under a stock style: stock = nil reads
 -- the session's latched style; the options preview (which shares this)
 -- passes its own and preview = true. On ns: the local cap.
+-- Corner Radius of the cast bar (s.castCornerRadius;
+-- EllesmereUI_RoundedCorners.lua): the bar is the shape, its background and
+-- fill the body. The icon keeps its own square box, and a border that wraps
+-- the icon stays square with it. Nothing until a radius is first set.
+local RoundCast
+do
+    local NO_ROOTS, textures = {}, {}
+    local opts = { roots = NO_ROOTS, textures = textures }
+    RoundCast = function(castbar, s, stock, unit, border, style)
+        local radius = (not stock and s and s.castCornerRadius) or 0
+        if radius > 0 and border ~= castbar and ns.UF_CastBorderWrapsIcon(unit, s) then radius = 0 end
+        if radius <= 0 and not castbar._cbRounded then return end
+        if radius > 0 then
+            castbar._cbRounded = true
+            local holder = castbar:GetParent()
+            textures[1], textures[2] = holder and holder._bgTex, castbar:GetStatusBarTexture()
+            opts.border, opts.style = border, style
+            EllesmereUI.RoundCorners(castbar, radius, opts)
+            textures[1], textures[2], opts.border = nil, nil, nil
+        else
+            castbar._cbRounded = nil
+            EllesmereUI.RoundCorners(castbar, 0)
+        end
+    end
+end
+
 function ns.UF_ApplyCastBorder(castbar, s, stock, unit, icon, preview)
     if not castbar then return end
     if stock == nil then stock = ns.UF_Blizz() end
@@ -213,6 +239,7 @@ function ns.UF_ApplyCastBorder(castbar, s, stock, unit, icon, preview)
             if not stock then PP.ShowBorder(castbar) end
         end
         ns.UF_ApplyCastIconBorder(castbar, s, stock, unit, icon, preview)
+        RoundCast(castbar, s, stock, unit, castbar, "solid")
         return
     end
     if not host then
@@ -254,6 +281,7 @@ function ns.UF_ApplyCastBorder(castbar, s, stock, unit, icon, preview)
     castbar._cbSolid = (tex == "solid" or tex == "") and size > 0
     castbar._cbSize = px or size
     ns.UF_ApplyCastIconBorder(castbar, s, stock, unit, icon, preview)
+    RoundCast(castbar, s, stock, unit, host, tex)
 end
 
 -- Cast icon decoration, shared by live frames and the options preview. New

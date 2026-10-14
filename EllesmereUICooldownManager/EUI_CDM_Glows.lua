@@ -389,6 +389,13 @@ StartNativeGlow = function(overlay, style, cr, cg, cb, opts)
         lineLen = math.min(lineLen, math.min(pW, pH))
         if lineLen < 1 then lineLen = 1 end
         _G_Glows.StartProceduralAnts(overlay, N, th, period, lineLen, cr, cg, cb, pW, pH, bgR, bgG, bgB, bgA)
+        -- Corner Radius: the dashes follow the icon's rounded outline.
+        local rfc = _ecmeFC[parent]
+        local round = rfc and rfc.rounded and EllesmereUI.RoundedRadius(parent) or nil
+        if round or overlay._cdmAntsRound then
+            overlay._cdmAntsRound = round and true or nil
+            _G_Glows.RoundAnts(overlay, round)
+        end
     elseif entry.buttonGlow then
         _G_Glows.StartButtonGlow(overlay, pW, cr, cg, cb, nil, pH)
     elseif entry.autocast then

@@ -3684,8 +3684,12 @@ function ns.UFO_BuildUnitPreview(parent, unitKey, side)
                 EllesmereUI.RoundCorners(pf, 0)
             end
             if power then
-                if det and radius > 0 then
-                    EllesmereUI.RoundCorners(power, radius, {
+                local pRadius = radius
+                if det and s.powerCornerRadius and not ResolveBlizzPreview(unitKey, s) then
+                    pRadius = s.powerCornerRadius
+                end
+                if det and pRadius > 0 then
+                    EllesmereUI.RoundCorners(power, pRadius, {
                         border = power._pbBorder, style = s.powerBorderStyle or "solid",
                         corners = pCorners,
                     })

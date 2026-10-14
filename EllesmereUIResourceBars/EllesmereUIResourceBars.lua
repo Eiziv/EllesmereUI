@@ -3389,6 +3389,18 @@ function ns.ERB_RoundBar(bar, cfg)
         corners = cfg.cornerMask,
     })
 end
+-- Cast bar: the frame is the shape (fill and an attached icon), the clipping
+-- bar, the background and that icon the body. A free icon sits outside it.
+function ns.ERB_RoundCast(frame, cb, stock, iconIn)
+    if not frame then return end
+    local radius = (not stock and cb.cornerRadius) or 0
+    if radius <= 0 then EllesmereUI.RoundCorners(frame, 0); return end
+    EllesmereUI.RoundCorners(frame, radius, {
+        roots = { frame._barClip, iconIn and frame._iconFrame or nil },
+        textures = { frame._bg },
+        border = frame._border, style = cb.borderTexture or "solid",
+    })
+end
 -- Class resource: the whole row rounds its outline; with Border on Pips each
 -- shown pip (or rune) also rounds inside its own border (pips only show from
 -- BuildBars, before this runs). The pip loop runs only while pips are rounded
@@ -9551,6 +9563,10 @@ end
     if castBarFrame._channeling and castBarFrame._tickSpellID then
         ShowChannelTicks(castBarFrame._tickSpellID)
     end
+
+    -- Rounded corners (EllesmereUI_RoundedCorners.lua; nothing at radius 0 or
+    -- under a stock style), on the settled layout.
+    ns.ERB_RoundCast(castBarFrame, cb, blizz, hasIcon and not iconFree)
 
     -- Idle when not casting (empty bar with "Always Show", else hidden). Runs LAST
     -- on purpose: the idle state re-suppresses the spark and icon the style pass

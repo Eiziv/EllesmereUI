@@ -307,6 +307,14 @@ function ns.UFO_BuildCastBarSection(parent, y, ctx)
                 EllesmereUI.ReapplyMatchPads(optState.selectedUnit .. "Castbar")
                 EllesmereUI:RefreshPage(true)
             end }
+        -- Corner Radius of the cast bar (EllesmereUI_RoundedCorners.lua).
+        cogRows[#cogRows + 1] = { type = "slider", label = "Corner Radius",
+            min = 0, max = EllesmereUI.ROUNDED_MAX_RADIUS, step = 1,
+            get = function() return UNIT_DB_MAP[optState.selectedUnit]().castCornerRadius or 0 end,
+            set = function(v)
+                UNIT_DB_MAP[optState.selectedUnit]().castCornerRadius = v > 0 and v or nil
+                ReloadAndUpdate()
+            end }
         EllesmereUI.BuildInlineCog(rgn, {
             title = "Cast Bar",
             rows = cogRows,
@@ -1650,6 +1658,23 @@ function ns.UFO_BuildBuffsDebuffsSection(parent, y, ctx)
                 end, true, 20)
             PP.Point(swatch, "RIGHT", rgn._control, "LEFT", -8, 0)
             EllesmereUI.RegisterWidgetRefresh(refreshSwatch)
+            -- Corner Radius (EllesmereUI_RoundedCorners.lua): an inline cog left
+            -- of the swatch. Aura icons round under a Solid border only.
+            rgn._lastInline = swatch
+            local radiusCog = EllesmereUI.BuildInlineCog(rgn, {
+                title = "Corner Radius", tip = "Corner Radius",
+                disabled = function() return SVal("auraBorderTexture", "solid") ~= "solid" end,
+                disabledTooltip = "This option requires the Border Style to be set to Solid",
+                rows = {
+                    { type = "slider", label = "Corner Radius", min = 0, max = EllesmereUI.ROUNDED_MAX_RADIUS, step = 1,
+                      get = function() return SVal("auraCornerRadius", 0) end,
+                      set = function(v)
+                          SDB().auraCornerRadius = v > 0 and v or nil
+                          ReloadAndUpdate(); UpdatePreview()
+                      end },
+                },
+            })
+            EllesmereUI.BlizzStyle.BlockInline("unitframes", radiusCog)
         end
     end
     end

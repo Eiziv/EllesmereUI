@@ -3017,6 +3017,10 @@ function ns.UFO_BuildBossOptions(W, parent, y)
                       requireState="disabled",
                       get=function() return B.castBorderCustom == true end,
                       set=function(v) B.castBorderCustom = v; ReloadAndUpdate(); EllesmereUI:RefreshPage(true) end },
+                    -- Corner Radius of the cast bar (EllesmereUI_RoundedCorners.lua).
+                    { type="slider", label="Corner Radius", min=0, max=EllesmereUI.ROUNDED_MAX_RADIUS, step=1,
+                      get=function() return B.castCornerRadius or 0 end,
+                      set=function(v) B.castCornerRadius = v > 0 and v or nil; ReloadAndUpdate() end },
                 },
             })
         end

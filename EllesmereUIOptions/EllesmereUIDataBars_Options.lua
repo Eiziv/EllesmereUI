@@ -1800,6 +1800,19 @@ initFrame:SetScript("OnEvent", function(self)
         -- than as a row of its own because it answers the same question the
         -- visibility controls do -- when and where this bar shows up -- and it
         -- is a set-once setting that should not cost a row.
+        -- Corner Radius (EllesmereUI_RoundedCorners.lua): an inline cog on the
+        -- Hide Border toggle.
+        EllesmereUI.BuildInlineCog(visRow._rightRegion, {
+            title = "Corner Radius", tip = "Corner Radius",
+            rows = {
+                { type = "slider", label = "Corner Radius", min = 0, max = EllesmereUI.ROUNDED_MAX_RADIUS, step = 1,
+                  get = function() return cfg.cornerRadius or 0 end,
+                  set = function(v)
+                      cfg.cornerRadius = v > 0 and v or nil
+                      ns.ApplyTheme(barId)
+                  end },
+            },
+        })
         do
             local leftRgn = visRow._leftRegion
             EllesmereUI.BuildInlineCog(leftRgn, { icon = EllesmereUI.COGS_ICON,

@@ -2237,6 +2237,32 @@ local function BuildCDMBarsPage(pageName, parent, yOffset)
                 end
                 EllesmereUI.RegisterWidgetRefresh(function() updateSwatch(); updateClassBorderSwatch(); UpdateBorderState() end)
                 UpdateBorderState()
+                -- Corner Radius (EllesmereUI_RoundedCorners.lua): an inline cog left of the
+                -- swatches. Square and cropped icons only: a custom shape has its own outline.
+                do
+                    local function Shaped()
+                        local sh = BD().iconShape or "none"
+                        return sh ~= "none" and sh ~= "cropped"
+                    end
+                    leftRgn._lastInline = swatch
+                    local radiusCog = EllesmereUI.BuildInlineCog(leftRgn, {
+                        title = "Corner Radius", tip = "Corner Radius",
+                        disabled = function() return Shaped() or not EllesmereUI.RoundedStyleOK(BD().borderTexture) end,
+                        disabledTooltip = function()
+                            if Shaped() then return "This option requires the Custom Icon Shape to be set to None or Cropped" end
+                            return "This option requires the Solid, Glow or Shadow border style."
+                        end,
+                        rows = {
+                            { type = "slider", label = "Corner Radius", min = 0, max = EllesmereUI.ROUNDED_MAX_RADIUS, step = 1,
+                              get = function() return BD().cornerRadius or 0 end,
+                              set = function(v)
+                                  BD().cornerRadius = v > 0 and v or nil
+                                  ns.RefreshCDMIconAppearance(BD().key); Refresh(); UpdateCDMPreview()
+                              end },
+                        },
+                    })
+                    EllesmereUI.BlizzStyle.BlockInline("cdmicons", radiusCog)
+                end
             end
             -- Sync icon: Border Size (left region)
             if not EllesmereUI._prebuilding then
@@ -2683,6 +2709,32 @@ local function BuildCDMBarsPage(pageName, parent, yOffset)
             end
             EllesmereUI.RegisterWidgetRefresh(function() updateSwatch(); updateClassBorderSwatch(); UpdateBorderSwatchState() end)
             UpdateBorderSwatchState()
+            -- Corner Radius (EllesmereUI_RoundedCorners.lua): an inline cog left of the
+            -- swatches. Square and cropped icons only: a custom shape has its own outline.
+            do
+                local function Shaped()
+                    local sh = BD().iconShape or "none"
+                    return sh ~= "none" and sh ~= "cropped"
+                end
+                rightRgn._lastInline = swatch
+                local radiusCog = EllesmereUI.BuildInlineCog(rightRgn, {
+                    title = "Corner Radius", tip = "Corner Radius",
+                    disabled = function() return Shaped() or not EllesmereUI.RoundedStyleOK(BD().borderTexture) end,
+                    disabledTooltip = function()
+                        if Shaped() then return "This option requires the Custom Icon Shape to be set to None or Cropped" end
+                        return "This option requires the Solid, Glow or Shadow border style."
+                    end,
+                    rows = {
+                        { type = "slider", label = "Corner Radius", min = 0, max = EllesmereUI.ROUNDED_MAX_RADIUS, step = 1,
+                          get = function() return BD().cornerRadius or 0 end,
+                          set = function(v)
+                              BD().cornerRadius = v > 0 and v or nil
+                              ns.RefreshCDMIconAppearance(BD().key); Refresh(); UpdateCDMPreview()
+                          end },
+                    },
+                })
+                EllesmereUI.BlizzStyle.BlockInline("cdmicons", radiusCog)
+            end
         end
         -- Sync icon on Border Size (right region)
         if not EllesmereUI._prebuilding then

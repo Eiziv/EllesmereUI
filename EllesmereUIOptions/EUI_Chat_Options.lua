@@ -370,6 +370,29 @@ initFrame:SetScript("OnEvent", function(self)
                     end,
                     true, 20)
                 PP.Point(customSwatch, "RIGHT", accentSwatch, "LEFT", -8, 0)
+                -- Corner Radius of the panel (EllesmereUI_RoundedCorners.lua): an
+                -- inline cog left of the swatches.
+                EllesmereUI.BuildInlineCog(rgn, { anchorTo = customSwatch, chain = false,
+                    title = "Corner Radius", tip = "Corner Radius",
+                    disabled = function()
+                        return (Cfg("panelBorderThickness") or "none") == "none"
+                            or not EllesmereUI.RoundedStyleOK(Cfg("panelBorderTexture"))
+                    end,
+                    disabledTooltip = function()
+                        if (Cfg("panelBorderThickness") or "none") == "none" then
+                            return "This option requires a Border Size above 0."
+                        end
+                        return "This option requires the Solid, Glow or Shadow border style."
+                    end,
+                    rows = {
+                        { type = "slider", label = "Corner Radius", min = 0, max = EllesmereUI.ROUNDED_MAX_RADIUS, step = 1,
+                          get = function() return Cfg("panelCornerRadius") or 0 end,
+                          set = function(v)
+                              Set("panelCornerRadius", v > 0 and v or nil)
+                              if ECHAT.ApplyExtendedBackground then ECHAT.ApplyExtendedBackground() end
+                          end },
+                    },
+                })
                 local customClick = customSwatch:GetScript("OnClick")
                 customSwatch:SetScript("OnClick", function(self, ...)
                     if (Cfg("panelBorderColorMode") or "custom") ~= "custom" then

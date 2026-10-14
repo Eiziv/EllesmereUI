@@ -95,7 +95,7 @@ end
 function _AC.StyleSig(bd)
     if not bd then return "" end
     return table.concat({
-        bd.iconShape or "none", bd.iconZoom or 0.08,
+        bd.iconShape or "none", bd.iconZoom or 0.08, bd.cornerRadius or 0,
         bd.borderSize or 1, bd.borderR or 0, bd.borderG or 0, bd.borderB or 0,
         bd.borderA or 1, bd.borderTexture or "solid", bd.borderThickness or "thin",
         bd.borderSizePx or "",
@@ -238,6 +238,10 @@ function _AC.BuildStyle(bd, fixedIcon)
         -- (a motion-enabled icon riding the cursor breaks [@mouseover] casts).
         noTooltips = (not (bd and bd.showTooltip) or (bd and bd.anchorTo == "mouse")) or nil,
         border = border,
+        -- The bar's Corner Radius, as on its own square and cropped icons
+        -- (AuraKit rounds the art, a Solid border and the swipe).
+        cornerRadius = (bd and not blizz and not customShape and not onlyNumbers
+            and (bd.cornerRadius or 0) > 0) and bd.cornerRadius or nil,
         applyExtra = _AC.ApplyExtra,
         cdm = {
             font = cdFont, size = SZ, zoom = zoom,
@@ -338,6 +342,12 @@ function _AC.ApplyExtra(button, d, style)
     local c = style.cdm
     if not c then return end
     local PP = EllesmereUI.PP
+
+    -- Corner Radius: our own regions over the art join the body AuraKit rounded.
+    if style.cornerRadius then
+        EllesmereUI.RoundedCover(button, d.cdmBg)
+        EllesmereUI.RoundedCover(button, d.cdmFixedIcon)
+    end
 
     -- Only Show Numbers strips the art down to the countdown. Shown-state as
     -- well as alpha, the same pair ApplyOnlyNumbers uses on the bar's own icons:
@@ -453,6 +463,16 @@ function _AC.ApplyExtra(button, d, style)
             end
         end
         d.cdmShapeKey = shapeKey
+    end
+    -- Corner Radius: AuraKit put the swipe on its rounded cell before this ran
+    -- and the block above set our square file over it, so the cell goes on
+    -- again, last. Off again: AuraKit left the stock swipe, ours comes back.
+    if d.cooldown and (style.cornerRadius or d.cdmSwipeRound) then
+        if not style.cornerRadius and not maskPath then
+            pcall(d.cooldown.SetSwipeTexture, d.cooldown, "Interface\\AddOns\\EllesmereUI\\media\\white-square.png")
+        end
+        d.cdmSwipeRound = style.cornerRadius and true or nil
+        pcall(EllesmereUI.RoundedSwipe, button, d.cooldown, style.width, style.height)
     end
     -- Ring color follows the border color on every pass, so a color-only change
     -- lands without re-running the geometry above. Border Size 0 drops the ring,

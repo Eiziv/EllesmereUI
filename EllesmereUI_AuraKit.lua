@@ -275,6 +275,61 @@ function AK.IconTexCoord(style)
     return 0, 1, 0, 1
 end
 
+-- Corner Radius (style.cornerRadius; EllesmereUI_RoundedCorners.lua): a plain
+-- icon rounds its art, its Solid border and its swipe. A shaped icon keeps its
+-- shape; a textured or stock border keeps its square art, and so does the
+-- engine's dispel ring. The mask is the button's, so the pass is change-guarded
+-- and deferred like the shape mask's: denied while auras are secret, retried
+-- once the restriction lifts.
+local RoundButton
+do
+    local NO_ROOTS, textures = {}, {}
+    local opts = { roots = NO_ROOTS, textures = textures, style = "solid" }
+    RoundButton = function(button, d, style, shapeActive)
+        local b = style.border
+        local w = style.width or 32
+        local h = style.height or style.width or 32
+        local radius = style.cornerRadius or 0
+        if shapeActive or style.blizzBorder or not d.icon
+            or (b and b.texture and b.texture ~= "" and b.texture ~= "solid") then
+            radius = 0
+        end
+        -- The cap RoundCorners sets from a size it may not be able to read here.
+        radius = math.min(radius, math.floor(math.min(w, h) / 2 - 0.49))
+        local key = radius > 0
+            and (radius .. "|" .. w .. "|" .. h .. "|" .. tostring(b and (b.edgePx or b.size))) or nil
+        if d.akRoundKey == key then
+            -- A color-only restyle: the ring follows the strips.
+            if key and b then
+                EllesmereUI.RoundedBorderColor(d.borderHost, b[1] or 0, b[2] or 0, b[3] or 0, b[4] or 1)
+            end
+            return
+        end
+        local ok, seated
+        if key then
+            textures[1] = d.icon
+            opts.border, opts.rect = b and d.borderHost or nil, d.borderHost
+            ok, seated = pcall(EllesmereUI.RoundCorners, button, radius, opts)
+            ok = ok and seated
+            textures[1], opts.border, opts.rect = nil, nil, nil
+        else
+            ok = pcall(EllesmereUI.RoundCorners, button, 0)
+        end
+        if ok then
+            d.akRoundKey = key
+        elseif d.styleKey and AK.AurasRestricted() then
+            deferredRestyles[d.styleKey] = true
+        end
+        if d.cooldown then
+            -- Back to the stock swipe (a shape set its own file just above).
+            if not key and not shapeActive and d.cooldown.SetSwipeTexture then
+                pcall(d.cooldown.SetSwipeTexture, d.cooldown, "")
+            end
+            pcall(EllesmereUI.RoundedSwipe, button, d.cooldown, w, h)
+        end
+    end
+end
+
 local function ApplyStyleToRegions(button, style)
     local d = bd[button]
     if not d then return end
@@ -494,6 +549,8 @@ local function ApplyStyleToRegions(button, style)
             if PP then PP:HideMaskedShapeBorder(d.borderHost) end
         end
     end
+
+    if style.cornerRadius or d.akRoundKey then RoundButton(button, d, style, shapeActive) end
 
     -- Engine dispel-type border (style.dispelBorder): textures the engine shows only on
     -- typed (dispellable) auras and tints per dispel type -- per-aura dispel data is

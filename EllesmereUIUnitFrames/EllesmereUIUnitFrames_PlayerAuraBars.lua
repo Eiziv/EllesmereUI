@@ -1203,6 +1203,9 @@ local function BuildStyle(isBuff, cfg)
         border = border,
         -- Weapon enchant buttons mirror this style: the stock purple ring.
         blizzEnchant = ns.PAB_Blizz() or nil,
+        -- Corner Radius (the Border Size cog; AuraKit rounds a plain icon's art,
+        -- its Solid border and its swipe).
+        cornerRadius = (not ns.PAB_Blizz() and (cfg.cornerRadius or 0) > 0) and cfg.cornerRadius or nil,
     }
 
     -- Custom icon shape (Square/Circle/Hexagon/etc, same media set as Action Bars
