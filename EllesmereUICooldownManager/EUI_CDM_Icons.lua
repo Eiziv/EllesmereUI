@@ -27,27 +27,45 @@ I.inCombatSetters[#I.inCombatSetters + 1] = function(v) _inCombat = v end
 -------------------------------------------------------------------------------
 -- Rounds a square or cropped icon: art, background and out-of-range tint take
 -- the body mask, a Solid / Glow / Shadow border is redrawn round and the swipe
--- takes the outline. Runs last in ApplyShapeToCDMIcon's square branch (border
--- and swipe file are set by then); radius 0 takes it all off again. Nothing
--- until a bar first sets a radius (ifc.rounded).
+-- takes the outline. Runs last in ApplyShapeToCDMIcon's square branch (the
+-- border is set by then); radius 0 takes it all off again. Icon restyles run
+-- on most reanchors, so the rounding pass itself runs only when one of its
+-- inputs moved (ifc.rk*); every restyle re-asserts the swipe cell, which reads
+-- nothing. Nothing until a bar first sets a radius (ifc.rounded).
 local RoundCDMIcon
 do
     local NO_ROOTS, textures = {}, {}
     local opts = { roots = NO_ROOTS, textures = textures }
-    RoundCDMIcon = function(icon, ifc, radius, barData, fd, tex, bg, cd)
+    RoundCDMIcon = function(icon, ifc, radius, barData, fd, tex, bg, cd, bSize, r, g, b, a)
         if radius <= 0 and not ifc.rounded then return end
         if radius > 0 then
-            ifc.rounded = true
-            textures[1], textures[2], textures[3] = tex, bg, icon.OutOfRange
-            opts.style = barData.borderTexture or "solid"
-            opts.border = (fd and fd.borderFrame) or (EllesmereUI.PP.GetBorders(icon) and icon) or nil
-            EllesmereUI.RoundCorners(icon, radius, opts)
-            textures[1], textures[2], textures[3], opts.border = nil, nil, nil, nil
+            local style = barData.borderTexture or "solid"
+            local px, size = barData.borderSizePx, barData.iconSize
+            local shape, crop = barData.iconShape, barData.iconCropPercent
+            if not (ifc.rounded and ifc.rkRadius == radius and ifc.rkStyle == style
+                and ifc.rkSize == bSize and ifc.rkPx == px and ifc.rkIcon == size
+                and ifc.rkShape == shape and ifc.rkCrop == crop
+                and ifc.rkR == r and ifc.rkG == g and ifc.rkB == b and ifc.rkA == a) then
+                ifc.rounded = true
+                ifc.rkRadius, ifc.rkStyle, ifc.rkSize, ifc.rkPx = radius, style, bSize, px
+                ifc.rkIcon, ifc.rkShape, ifc.rkCrop = size, shape, crop
+                ifc.rkR, ifc.rkG, ifc.rkB, ifc.rkA = r, g, b, a
+                textures[1], textures[2], textures[3] = tex, bg, icon.OutOfRange
+                opts.style = style
+                opts.border = (fd and fd.borderFrame) or (EllesmereUI.PP.GetBorders(icon) and icon) or nil
+                EllesmereUI.RoundCorners(icon, radius, opts)
+                textures[1], textures[2], textures[3], opts.border = nil, nil, nil, nil
+            end
+            if cd then pcall(EllesmereUI.RoundedSwipe, icon, cd) end
         else
-            ifc.rounded = nil
+            ifc.rounded, ifc.rkRadius = nil, nil
             EllesmereUI.RoundCorners(icon, 0)
+            -- The square file back (skipped while rounded), then its whole range.
+            if cd then
+                pcall(cd.SetSwipeTexture, cd, ns.CdmSwipeFile())
+                pcall(EllesmereUI.RoundedSwipe, icon, cd)
+            end
         end
-        if cd then pcall(EllesmereUI.RoundedSwipe, icon, cd) end
     end
 end
 
@@ -152,7 +170,9 @@ ApplyShapeToCDMIcon = function(icon, shape, barData, ssb)
         if cd then
             cd:ClearAllPoints()
             cd:SetAllPoints(icon)
-            pcall(cd.SetSwipeTexture, cd, ns.CdmSwipeFile())
+            -- A rounded icon keeps its swipe.png cell (RoundCDMIcon re-asserts
+            -- it): swapping files on every restyle costs a texture rebind each.
+            if not ifc.rounded then pcall(cd.SetSwipeTexture, cd, ns.CdmSwipeFile()) end
             if cd.SetUseCircularEdge then pcall(cd.SetUseCircularEdge, cd, false) end
         end
 
@@ -160,7 +180,8 @@ ApplyShapeToCDMIcon = function(icon, shape, barData, ssb)
         if bg then
             bg:ClearAllPoints(); bg:SetAllPoints()
         end
-        RoundCDMIcon(icon, ifc, blizzArt and 0 or (barData.cornerRadius or 0), barData, fd, tex, bg, cd)
+        RoundCDMIcon(icon, ifc, blizzArt and 0 or (barData.cornerRadius or 0), barData, fd, tex, bg, cd,
+            borderSz, brdR, brdG, brdB, brdA)
         return
     end
 

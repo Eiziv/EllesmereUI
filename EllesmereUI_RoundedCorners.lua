@@ -615,7 +615,10 @@ local function Fit(st)
     -- at most (short side - 1) / 2, so the region always holds its mask.
     -- SNAP: a pixel-snapped side reads a hair under its whole size (4.99999),
     -- which would cost a thin bar one of the two units it can round by.
-    local half = HalfSide(rect)
+    -- The size is kept for RoundedSwipe, so its calls between passes read nothing.
+    local w, h = Size(rect)
+    st.w, st.h = w, h
+    local half = w and min(w, h) / 2
     if half and half >= 1 then
         local cap = max(1, floor(half - 0.5 + SNAP))
         if radius > cap then radius = cap end
@@ -759,7 +762,7 @@ function EllesmereUI.RoundedSwipe(owner, cd, w, h)
     if not cd then return false end
     local st = owner and state[owner]
     if st and st.on then
-        if not w then w, h = Size(st.rect) end
+        if not w then w, h = st.w, st.h end
         if w and w > 0 and h > 0 then
             local col = Clamp(ceil(st.fit * 64 / h - 0.001), 1, SWIPE_COLS)
             local row = Clamp(floor((h / w - 0.5) * 2 * (SWIPE_ROWS - 1) + 0.5) + 1, 1, SWIPE_ROWS)
